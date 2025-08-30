@@ -12,5 +12,5 @@ name = "NODE_ENV"
 value = "production"
 
 [[deploy.environmentVariables]]
-name = "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD"
-value = "1"
+name = "PLAYWRIGHT_BROWSERS_PATH"
+value = "0"
