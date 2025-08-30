@@ -81,55 +81,69 @@ export class ColorPaletteAutomation {
         };
     }
 
-    // ===== PARALLEL EXTRACTION (two pages) =====
     async generateRadixPaletteParallel(colors: ColorPalette): Promise<GeneratedPalette> {
         if (!this.browser) throw new Error("Browser not initialized. Call initialize() first.");
 
         const url = "https://www.radix-ui.com/colors/custom";
         this.storedColors = colors;
 
-        const [lightPage, darkPage] = await Promise.all([
-            this.browser!.newPage({ viewport: { width: 1920, height: 1080 } }),
-            this.browser!.newPage({ viewport: { width: 1920, height: 1080 } }),
+        // Two isolated contexts (cookie/storage isolation) under ONE warm browser
+        const [ctxLight, ctxDark] = await Promise.all([
+            this.browser.newContext({ viewport: { width: 1920, height: 1080 } }),
+            this.browser.newContext({ viewport: { width: 1920, height: 1080 } }),
         ]);
 
-        await Promise.all([
-            lightPage.goto(url, { waitUntil: "networkidle", timeout: 30_000 }),
-            darkPage.goto(url, { waitUntil: "networkidle", timeout: 30_000 }),
-        ]);
+        try {
+            const [lightPage, darkPage] = await Promise.all([
+                ctxLight.newPage(),
+                ctxDark.newPage(),
+            ]);
 
-        const [lightResult, darkResult] = await Promise.all([
-            (async () => {
-                await this.ensureLightModeOn(lightPage);
-                await this.fillColorInputsOn(lightPage, colors, false);
-                return this.extractColorsFromSwatchesOn(lightPage, "light");
-            })(),
-            (async () => {
-                await this.switchToDarkModeOn(darkPage, colors);
-                await this.fillColorInputsOn(darkPage, colors, true);
-                return this.extractColorsFromSwatchesOn(darkPage, "dark");
-            })(),
-        ]);
+            // Load both pages in parallel
+            await Promise.all([
+                lightPage.goto(url, { waitUntil: "networkidle", timeout: 30_000 }),
+                darkPage.goto(url, { waitUntil: "networkidle", timeout: 30_000 }),
+            ]);
 
-        await Promise.all([lightPage.close(), darkPage.close()]);
+            // Do the full flow for each mode concurrently
+            const [lightResult, darkResult] = await Promise.all([
+                (async () => {
+                    await this.ensureLightModeOn(lightPage);
+                    await this.fillColorInputsOn(lightPage, colors, /* isDark */ false);
+                    return this.extractColorsFromSwatchesOn(lightPage, "light");
+                })(),
+                (async () => {
+                    await this.switchToDarkModeOn(darkPage, colors);
+                    await this.fillColorInputsOn(darkPage, colors, /* isDark */ true);
+                    return this.extractColorsFromSwatchesOn(darkPage, "dark");
+                })(),
+            ]);
 
-        const accentScale: RadixColorScale = {
-            name: "accent",
-            lightSteps: lightResult.accent,
-            darkSteps: darkResult.accent,
-            lightHslSteps: lightResult.accent.map(hex => hexToHSLString(hex)),
-            darkHslSteps: darkResult.accent.map(hex => hexToHSLString(hex)),
-        };
+            const accentScale: RadixColorScale = {
+                name: "accent",
+                lightSteps: lightResult.accent,
+                darkSteps: darkResult.accent,
+                lightHslSteps: lightResult.accent.map((hex) => hexToHSLString(hex)),
+                darkHslSteps: darkResult.accent.map((hex) => hexToHSLString(hex)),
+            };
 
-        const grayScale: RadixColorScale = {
-            name: "gray",
-            lightSteps: lightResult.gray,
-            darkSteps: darkResult.gray,
-            lightHslSteps: lightResult.gray.map(hex => hexToHSLString(hex)),
-            darkHslSteps: darkResult.gray.map(hex => hexToHSLString(hex)),
-        };
+            const grayScale: RadixColorScale = {
+                name: "gray",
+                lightSteps: lightResult.gray,
+                darkSteps: darkResult.gray,
+                lightHslSteps: lightResult.gray.map((hex) => hexToHSLString(hex)),
+                darkHslSteps: darkResult.gray.map((hex) => hexToHSLString(hex)),
+            };
 
-        return { accent: accentScale, gray: grayScale, css: { light: "", dark: "", variables: "" } };
+            return {
+                accent: accentScale,
+                gray: grayScale,
+                css: { light: "", dark: "", variables: "" },
+            };
+        } finally {
+            // Always close contexts even if one side throws
+            await Promise.allSettled([ctxLight.close(), ctxDark.close()]);
+        }
     }
 
     // ===== Sequential (kept for fallback/back-compat) =====
