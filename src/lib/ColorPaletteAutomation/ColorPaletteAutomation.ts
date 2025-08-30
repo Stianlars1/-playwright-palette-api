@@ -57,7 +57,8 @@ export class ColorPaletteAutomation {
     // ----- Color seeding (unchanged) -----
     generateBaseColors(
         brandColor?: string,
-        scheme: Scheme = "analogous"
+        scheme: Scheme = "analogous",
+        opts?: { harmonized?: boolean }
     ): { accent: string; gray: string; lightBackground: string; darkBackground: string } {
         const normalize = (raw?: string): string | undefined => {
             if (!raw) return undefined;
@@ -70,15 +71,14 @@ export class ColorPaletteAutomation {
             return undefined;
         };
 
+        const useHarmonized = !!opts?.harmonized;
 
-        // 1) keep the user's color as the accent, verbatim
+
         const seed = normalize(brandColor) ?? "#3B82F6";
-
-        // 2) use color theory only to derive companions (gray + backgrounds)
         const theory = AdvancedColorTheory.generateHarmoniousPalette(seed, scheme);
 
         return {
-            accent: seed,
+            accent: useHarmonized ? theory.accent : seed,
             gray: theory.gray,
             lightBackground: theory.lightBg,
             darkBackground: theory.darkBg,

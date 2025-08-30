@@ -9,10 +9,25 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test:local": "curl -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\": \"#3B82F6\", \"scheme\": \"analogous\"}' | jq",
-    "test:debug": "curl -sS -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\"}' | tee /tmp/palette.json | jq '{sizes:{al:(.data.accentScale.light|length),ad:(.data.accentScale.dark|length),gl:(.data.grayScale.light|length),gd:(.data.grayScale.dark|length)}, data:.data}'",
-    "test:local-raw": "curl -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\": \"#3B82F6\", \"scheme\": \"analogous\"}'",
-    "test:production": "curl -X POST https://playwright-palette-api-production.up.railway.app/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\": \"#3B82F6\", \"scheme\": \"analogous\"}' | jq"
+
+    "test:local": "curl -sS -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\"}' | jq",
+    "test:local:exact": "curl -sS -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":false}' | jq",
+    "test:local:harmonized": "curl -sS -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":true}' | jq",
+    "test:local:raw": "curl -sS -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\"}'",
+
+    "test:local:meta": "curl -sS -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":false}' | jq '.metadata'",
+
+    "test:local:headers": "curl -sS -D - -o /dev/null -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":false}' http://localhost:3000/api/generate-palette | sed -n '1,50p'",
+
+    "test:local:assert:exact": "curl -sS -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":false}' | jq -e '(.data.accent==\"#3B82F6\") and (.data.accentScale.light[8]==\"#3B82F6\") and (.data.accentScale.dark[8]==\"#3B82F6\")' && echo OK || (echo FAIL && exit 1)",
+
+    "test:production": "curl -sS -X POST https://playwright-palette-api-production.up.railway.app/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\"}' | jq",
+    "test:production:exact": "curl -sS -X POST https://playwright-palette-api-production.up.railway.app/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":false}' | jq",
+    "test:production:harmonized": "curl -sS -X POST https://playwright-palette-api-production.up.railway.app/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":true}' | jq",
+    "test:production:meta": "curl -sS -X POST https://playwright-palette-api-production.up.railway.app/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":false}' | jq '.metadata'",
+    "test:production:headers": "curl -sS -D - -o /dev/null -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\",\"harmonized\":false}' https://playwright-palette-api-production.up.railway.app/api/generate-palette | sed -n '1,50p'",
+
+    "test:production:compare": "echo 'EXACT:' && npm run -s test:production:exact | jq -r '.data.accent' && echo 'HARMONIZED:' && npm run -s test:production:harmonized | jq -r '.data.accent'"
   },
   "dependencies": {
     "@railway/cli": "^4.6.3",

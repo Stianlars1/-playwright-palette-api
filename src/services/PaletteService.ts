@@ -22,13 +22,13 @@ export class PaletteService {
         return this.automation;
     }
 
-    async generatePalette(hex: string, scheme: Scheme = "analogous"): Promise<PaletteResponse> {
+    async generatePalette(hex: string, scheme: Scheme = "analogous", opts?: { harmonized?: boolean }): Promise<PaletteResponse> {
         const automation = await this.getAutomation();
 
-        // 1) Create base accent/gray/backgrounds from input
-        const baseColors = automation.generateBaseColors(hex, scheme);
+        // 1) Base colors (optionally harmonized accent)
+        const baseColors = automation.generateBaseColors(hex, scheme, { harmonized: !!opts?.harmonized });
 
-        // 2) Extract full 12-step ramps (light + dark) in parallel
+        // 2) Extract full ramps (parallel light+dark)
         const full = await automation.generateRadixPaletteParallel({
             accent: baseColors.accent,
             gray: baseColors.gray,
@@ -36,7 +36,7 @@ export class PaletteService {
             darkBackground: baseColors.darkBackground,
         });
 
-        // 3) Optionally keep the browser warm between requests (faster subsequent calls)
+        // 3) Keep browser warm if enabled
         if (process.env.KEEP_BROWSER_ALIVE !== "1") {
             await this.shutdown();
         }
@@ -53,9 +53,8 @@ export class PaletteService {
 
     async healthCheck(): Promise<boolean> {
         try {
-            const automation = await this.getAutomation();
-            // Basic sanity: browser is up. (We don’t hammer the Radix page here.)
-            return !!automation;
+            await this.getAutomation();
+            return true;
         } catch (err) {
             console.error("Health check failed:", err);
             return false;
