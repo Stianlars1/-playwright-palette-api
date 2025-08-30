@@ -1,35 +1,33 @@
-FROM mcr.microsoft.com/playwright:v1.55.0-noble
-
+# ---- Build stage (needs devDeps for tsc) ----
+FROM mcr.microsoft.com/playwright:v1.55.0-noble AS build
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-
-# Copy package files
+# 1) Install dev deps regardless of NODE_ENV
 COPY package*.json tsconfig.json ./
+# force include dev deps even if env injects production
+RUN npm ci --no-audit --no-fund --include=dev
 
-# Install ALL dependencies first (needed for build)
-RUN npm ci --no-audit --no-fund && \
-    npm cache clean --force
-
-# Copy source and build
-COPY src/ ./src/
+# 2) Build
+COPY src ./src
 RUN npm run build
 
-# Remove dev dependencies and build artifacts
-RUN npm prune --omit=dev && \
-    rm -rf src/ tsconfig.json node_modules/.cache /tmp/*
+# ---- Runtime stage ----
+FROM mcr.microsoft.com/playwright:v1.55.0-noble AS runner
+WORKDIR /app
+ENV NODE_ENV=production
 
-# Security: non-root user
-RUN groupadd -r appuser && \
-    useradd -r -g appuser -G audio,video appuser && \
-    chown -R appuser:appuser /app
+# Only prod deps in final image
+COPY package*.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
+# Bring compiled JS
+COPY --from=build /app/dist ./dist
+
+# Hardened non-root user with video/audio groups (Chrome needs it)
+RUN groupadd -r appuser && useradd -r -g appuser -G audio,video appuser \
+  && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE $PORT
-
-HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-3000}/health || exit 1
-
-CMD ["npm", "start"]
+EXPOSE 3000
+# Railway provides PORT; your server already honors it and exposes /health. :contentReference[oaicite:2]{index=2}
+CMD ["node", "dist/server.js"]
