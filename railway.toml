@@ -7,10 +7,6 @@ healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
-[[deploy.environmentVariables]]
-name = "NODE_ENV"
-value = "production"
-
-[[deploy.environmentVariables]]
-name = "PLAYWRIGHT_BROWSERS_PATH"
-value = "0"
+[deploy.variables]
+NODE_ENV = "production"
+PORT = "3000"
