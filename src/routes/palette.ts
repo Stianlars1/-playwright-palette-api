@@ -1,82 +1,88 @@
-import { Router, Request, Response } from 'express';
-import { PaletteService } from '../services/PaletteService.js';
-import { Scheme } from '../types/types.js';
+import { Router, Request, Response } from "express";
+import { PaletteService } from "../services/PaletteService.js";
+import { Scheme } from "../types/types.js";
 
 const router = Router();
 const paletteService = new PaletteService();
 
 const validateHex = (hex: string): string | null => {
-  if (!hex) return 'Hex color is required';
-  
-  const cleaned = hex.trim().replace(/^#/, '');
-  
-  if (!/^[0-9A-Fa-f]{3}$/.test(cleaned) && !/^[0-9A-Fa-f]{6}$/.test(cleaned)) {
-    return 'Invalid hex format. Use #RGB or #RRGGBB format';
-  }
-  
-  return null;
+    if (!hex) return "Hex color is required";
+    const cleaned = hex.trim().replace(/^#/, "");
+    if (!/^[0-9A-Fa-f]{3}$/.test(cleaned) && !/^[0-9A-Fa-f]{6}$/.test(cleaned)) {
+        return "Invalid hex format. Use #RGB or #RRGGBB format";
+    }
+    return null;
 };
 
-const timeoutMiddleware = (req: Request, res: Response, next: Function) => {
-  const timeout = setTimeout(() => {
-    if (!res.headersSent) {
-      res.status(408).json({
-        error: 'Request timeout',
-        message: 'Palette generation took too long. Please try again.'
-      });
-    }
-  }, 45000);
-
-  res.on('finish', () => clearTimeout(timeout));
-  res.on('close', () => clearTimeout(timeout));
-  
-  next();
-};
-
-router.post('/generate-palette', timeoutMiddleware, async (req: Request, res: Response) => {
-  const startTime = Date.now();
-  
-  try {
-    const { hex, scheme = 'analogous' } = req.body;
-
-    console.log(`🎨 Generating palette for hex: ${hex}, scheme: ${scheme}`);
-
-    const hexError = validateHex(hex);
-    if (hexError) {
-      return res.status(400).json({
-        success: false,
-        error: 'Validation error',
-        message: hexError,
-        received: { hex, scheme }
-      });
-    }
-
-    const result = await paletteService.generatePalette(hex, scheme as Scheme);
-    const duration = Date.now() - startTime;
-    
-    console.log(`✅ Palette generated in ${duration}ms`);
-    
+router.get("/", async (_req: Request, res: Response) => {
     res.json({
-      success: true,
-      data: result,
-      metadata: {
-        generatedAt: new Date().toISOString(),
-        processingTime: `${duration}ms`,
-        inputHex: hex,
-        inputScheme: scheme
-      }
+        name: "Playwright Palette API",
+        version: "1.0.0",
+        endpoints: {
+            health: "GET /health",
+            generate: "POST /api/generate-palette",
+        },
+        example: {
+            method: "POST",
+            path: "/api/generate-palette",
+            body: { hex: "#3B82F6", scheme: "analogous" },
+        },
     });
+});
 
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ Palette generation failed after ${duration}ms:`, error);
-    
-    res.status(500).json({
-      success: false,
-      error: 'Palette generation failed',
-      message: error instanceof Error ? error.message : 'Unknown error occurred'
+router.get("/health", async (_req: Request, res: Response) => {
+    const ok = await paletteService.healthCheck();
+    res.status(ok ? 200 : 500).json({
+        status: ok ? "ok" : "error",
+        service: "Playwright Palette API",
+        time: new Date().toISOString(),
     });
-  }
+});
+
+router.post("/api/generate-palette", async (req: Request, res: Response) => {
+    const start = Date.now();
+
+    try {
+        const { hex, scheme } = req.body || {};
+        const err = validateHex(hex);
+        if (err) return res.status(400).json({ success: false, error: err });
+
+        const allowed: Scheme[] = ["analogous", "complementary", "triadic", "monochromatic"];
+        const useScheme: Scheme = allowed.includes(scheme) ? scheme : "analogous";
+
+        // 45s overall safety timeout (Railway is generous, but keep it sane)
+        const timeoutMs = Number(process.env.REQUEST_TIMEOUT_MS ?? 45000);
+
+        const result = await Promise.race([
+            paletteService.generatePalette(hex, useScheme),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error("Request timeout")), timeoutMs)),
+        ]);
+
+        const duration = Date.now() - start;
+        return res.json({
+            success: true,
+            data: result,
+            metadata: {
+                generatedAt: new Date().toISOString(),
+                processingTime: `${duration}ms`,
+                inputHex: hex,
+                inputScheme: useScheme,
+            },
+        });
+    } catch (error: any) {
+        const duration = Date.now() - start;
+        console.error(`❌ Palette generation failed after ${duration}ms:`, error);
+
+        if (String(error?.message || "").includes("timeout")) {
+            return res.status(408).json({ success: false, error: "Request timed out" });
+        }
+
+        return res.status(500).json({
+            success: false,
+            error: "Palette generation failed",
+            message: error?.message || "Unknown error",
+        });
+    }
 });
 
 export { router as paletteRouter };

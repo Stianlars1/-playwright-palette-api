@@ -1,19 +1,13 @@
-import { ColorPaletteAutomation } from '../lib/ColorPaletteAutomation/ColorPaletteAutomation.js';
-import { Scheme } from '../types/types.js';
+import { ColorPaletteAutomation } from "../lib/ColorPaletteAutomation/ColorPaletteAutomation.js";
+import { Scheme } from "../types/types.js";
 
 export interface PaletteResponse {
     accent: string;
     gray: string;
     lightBackground: string;
     darkBackground: string;
-    accentScale: {
-        light: string[];
-        dark: string[];
-    };
-    grayScale: {
-        light: string[];
-        dark: string[];
-    };
+    accentScale: { light: string[]; dark: string[] };
+    grayScale: { light: string[]; dark: string[] };
 }
 
 export class PaletteService {
@@ -22,52 +16,48 @@ export class PaletteService {
     private async getAutomation(): Promise<ColorPaletteAutomation> {
         if (!this.automation) {
             this.automation = new ColorPaletteAutomation();
+            if (process.env.DEBUG_AUTOMATION === "1") this.automation.setDebugMode(true);
+            await this.automation.initialize();
         }
         return this.automation;
     }
 
-    async generatePalette(hex: string, scheme: Scheme = 'analogous'): Promise<PaletteResponse> {
+    async generatePalette(hex: string, scheme: Scheme = "analogous"): Promise<PaletteResponse> {
         const automation = await this.getAutomation();
 
-        try {
-            console.log('🚀 Initializing Playwright browser...');
-            await automation.initialize();
+        // 1) Create base accent/gray/backgrounds from input
+        const baseColors = automation.generateBaseColors(hex, scheme);
 
-            console.log('🎨 Generating base colors...');
-            const baseColors = automation.generateBaseColors(hex, scheme);
+        // 2) Extract full 12-step ramps (light + dark) in parallel
+        const full = await automation.generateRadixPaletteParallel({
+            accent: baseColors.accent,
+            gray: baseColors.gray,
+            lightBackground: baseColors.lightBackground,
+            darkBackground: baseColors.darkBackground,
+        });
 
-            console.log('📊 Generating Radix scales...');
-            const fullPalette = await automation.generateRadixPalette(baseColors);
-
-            console.log('✅ Palette generation complete');
-
-            return {
-                accent: baseColors.accent,
-                gray: baseColors.gray,
-                lightBackground: baseColors.lightBackground,
-                darkBackground: baseColors.darkBackground,
-                accentScale: {
-                    light: fullPalette.accent.lightSteps,
-                    dark: fullPalette.accent.darkSteps
-                },
-                grayScale: {
-                    light: fullPalette.gray.lightSteps,
-                    dark: fullPalette.gray.darkSteps
-                }
-            };
-        } finally {
-            console.log('🧹 Cleaning up browser instance...');
-            await automation.cleanup();
+        // 3) Optionally keep the browser warm between requests (faster subsequent calls)
+        if (process.env.KEEP_BROWSER_ALIVE !== "1") {
+            await this.shutdown();
         }
+
+        return {
+            accent: baseColors.accent,
+            gray: baseColors.gray,
+            lightBackground: baseColors.lightBackground,
+            darkBackground: baseColors.darkBackground,
+            accentScale: { light: full.accent.lightSteps, dark: full.accent.darkSteps },
+            grayScale: { light: full.gray.lightSteps, dark: full.gray.darkSteps },
+        };
     }
 
     async healthCheck(): Promise<boolean> {
         try {
-            // Simple health check - verify we can create automation instance
-            const automation = new ColorPaletteAutomation();
-            return true;
-        } catch (error) {
-            console.error('Health check failed:', error);
+            const automation = await this.getAutomation();
+            // Basic sanity: browser is up. (We don’t hammer the Radix page here.)
+            return !!automation;
+        } catch (err) {
+            console.error("Health check failed:", err);
             return false;
         }
     }
