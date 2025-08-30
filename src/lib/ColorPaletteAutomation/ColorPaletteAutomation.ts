@@ -70,11 +70,15 @@ export class ColorPaletteAutomation {
             return undefined;
         };
 
+
+        // 1) keep the user's color as the accent, verbatim
         const seed = normalize(brandColor) ?? "#3B82F6";
+
+        // 2) use color theory only to derive companions (gray + backgrounds)
         const theory = AdvancedColorTheory.generateHarmoniousPalette(seed, scheme);
 
         return {
-            accent: theory.accent,
+            accent: seed,
             gray: theory.gray,
             lightBackground: theory.lightBg,
             darkBackground: theory.darkBg,
