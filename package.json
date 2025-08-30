@@ -9,7 +9,11 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test:local": "curl -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\": \"#3B82F6\", \"scheme\": \"analogous\"}'"
+    "test:local": "curl -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\": \"#3B82F6\", \"scheme\": \"analogous\"}' | jq",
+    "test:debug": "curl -sS -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\":\"#3B82F6\",\"scheme\":\"analogous\"}' | tee /tmp/palette.json | jq '{sizes:{al:(.data.accentScale.light|length),ad:(.data.accentScale.dark|length),gl:(.data.grayScale.light|length),gd:(.data.grayScale.dark|length)}, data:.data}'",
+    "test:local-raw": "curl -X POST http://localhost:3000/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\": \"#3B82F6\", \"scheme\": \"analogous\"}'",
+    "test:production": "curl -X POST https://playwright-palette-api-production.up.railway.app/api/generate-palette -H 'Content-Type: application/json' -d '{\"hex\": \"#3B82F6\", \"scheme\": \"analogous\"}' | jq"
+
   },
   "dependencies": {
     "@railway/cli": "^4.6.3",

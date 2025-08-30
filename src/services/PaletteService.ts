@@ -17,26 +17,14 @@ export interface PaletteResponse {
 }
 
 export class PaletteService {
-    private automation: ColorPaletteAutomation | null = null;
-
-    private async getAutomation(): Promise<ColorPaletteAutomation> {
-        if (!this.automation) {
-            this.automation = new ColorPaletteAutomation();
-        }
-        return this.automation;
-    }
-
     async generatePalette(hex: string, scheme: Scheme = 'analogous'): Promise<PaletteResponse> {
-        const automation = await this.getAutomation();
+        const automation = new ColorPaletteAutomation();
 
         try {
-            console.log('🚀 Initializing Playwright browser...');
-            await automation.initialize();
-
             console.log('🎨 Generating base colors...');
             const baseColors = automation.generateBaseColors(hex, scheme);
 
-            console.log('📊 Generating Radix scales...');
+            console.log('📊 Generating Radix scales in parallel...');
             const fullPalette = await automation.generateRadixPalette(baseColors);
 
             console.log('✅ Palette generation complete');
@@ -55,27 +43,19 @@ export class PaletteService {
                     dark: fullPalette.gray.darkSteps
                 }
             };
-        } finally {
-            console.log('🧹 Cleaning up browser instance...');
-            await automation.cleanup();
+        } catch (error) {
+            console.error('Palette generation error:', error);
+            throw error;
         }
     }
 
     async healthCheck(): Promise<boolean> {
         try {
-            // Simple health check - verify we can create automation instance
             const automation = new ColorPaletteAutomation();
             return true;
         } catch (error) {
             console.error('Health check failed:', error);
             return false;
-        }
-    }
-
-    async shutdown(): Promise<void> {
-        if (this.automation) {
-            await this.automation.cleanup();
-            this.automation = null;
         }
     }
 }
